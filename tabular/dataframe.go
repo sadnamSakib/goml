@@ -146,6 +146,14 @@ func Write_CSV(df DataFrame, filename string) error {
 		listOfColumns = append(listOfColumns, key)
 	}
 	sort.Strings(listOfColumns)
+	for _, key := range listOfColumns {
+		if columns > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(key)
+		columns++
+
+	}
 	for i := 0; i < rows; i++ {
 		for _, key := range listOfColumns {
 			if columns > 0 {

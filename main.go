@@ -17,7 +17,7 @@ func main() {
 	// }
 	// fmt.Println(sum)
 	// fmt.Println(column.Concat())
-	df, err := tabular.Read_CSV("newcsv.csv", false)
+	df, err := tabular.Read_CSV("tabular/people.csv", true)
 	if err != nil {
 		fmt.Println(err)
 	}
