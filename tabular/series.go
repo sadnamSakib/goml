@@ -1,126 +1,231 @@
 package tabular
 
 import (
-	"cmp"
-	"fmt"
-	"strings"
+	"errors"
+	"reflect"
+	"strconv"
+	"sync"
 )
 
-type Series []interface{}
+var UnsupportedTypeError = errors.New("unsupported type")
 
-func NewSeries(values ...interface{}) Series {
-	var s Series
-	for _, value := range values {
-		s.Append(value)
-	}
-	return s
+type Series struct {
+	Name     string
+	elements Elements
+	T        reflect.Type
 }
 
-func (s *Series) Append(val interface{}) {
-	*s = append(*s, val)
-}
+func MakeSeries(name string, v []string, wg *sync.WaitGroup, ch chan Series) {
+	defer wg.Done()
+	var t reflect.Type
+	length := len(v)
+	isBool := 0
+	isFloat := 0
+	isString := 0
+	isInt := 0
 
-func (s Series) String() string {
-	var sb strings.Builder
-	for i, v := range s {
-		if i > 0 {
-			sb.WriteString(", ")
+	for _, val := range v {
+		if val == "" || val == "NaN" {
+			isBool++
+			isFloat++
+			isString++
+			isInt++
+			continue
 		}
-		sb.WriteString(fmt.Sprintf("%v", v))
-	}
-	return sb.String()
-}
-
-func (s Series) Len() int {
-	return len(s)
-}
-
-func less(i, j interface{}) bool {
-
-	if fmt.Sprintf("%T", i) != fmt.Sprintf("%T", j) {
-		return cmp.Compare(fmt.Sprintf("%v", i), fmt.Sprintf("%v", j)) < 0
-	}
-
-	switch i.(type) {
-	case int:
-		return cmp.Compare(i.(int), j.(int)) < 0
-	case float64:
-		return cmp.Compare(i.(float64), j.(float64)) < 0
-	case string:
-		return cmp.Compare(i.(string), j.(string)) < 0
-	case bool:
-		if i.(bool) == j.(bool) {
-			return false
-		} else if !i.(bool) {
-			return true
-		} else {
-			return false
+		if _, err := strconv.ParseBool(val); err == nil {
+			isBool++
 		}
+		if _, err := strconv.ParseInt(val, 10, 64); err == nil {
+			isInt++
+		}
+		if _, err := strconv.ParseFloat(val, 64); err == nil {
+			isFloat++
+		}
+		isString++
+	}
+	if isBool == length {
+		t = reflect.TypeOf(true)
+	} else if isInt == length {
+		t = reflect.TypeOf(int64(0))
+	} else if isFloat == length {
+		t = reflect.TypeOf(float64(0))
+	} else {
+
+		t = reflect.TypeOf("")
+	}
+	s, _ := new(name, v, t)
+
+	ch <- s
+}
+
+func new(name string, v []string, t reflect.Type) (Series, error) {
+	length := len(v)
+	switch t.Kind() {
+	case reflect.Int64:
+		elements := make(intElements, length)
+		for i, val := range v {
+			if val == "" || val == "NaN" {
+				elements[i].nan = true
+				continue
+			}
+			elements[i].value, _ = strconv.ParseInt(val, 10, 64)
+
+		}
+		return Series{
+			Name:     name,
+			elements: &elements,
+			T:        t,
+		}, nil
+	case reflect.Float64:
+		elements := make(floatElements, length)
+		for i, val := range v {
+			if val == "" {
+				elements[i].nan = true
+				continue
+			}
+			elements[i].value, _ = strconv.ParseFloat(val, 64)
+		}
+		return Series{
+			Name:     name,
+			elements: &elements,
+			T:        t,
+		}, nil
+	case reflect.String:
+		elements := make(stringElements, length)
+		for i, val := range v {
+			if val == "" {
+				elements[i].nan = true
+				continue
+			}
+			elements[i].value = val
+		}
+		return Series{
+			Name:     name,
+			elements: &elements,
+			T:        t,
+		}, nil
+	case reflect.Bool:
+		elements := make(boolElements, length)
+		for i, val := range v {
+			if val == "" {
+				elements[i].nan = true
+				continue
+			}
+			elements[i].value, _ = strconv.ParseBool(val)
+		}
+		return Series{
+			Name:     name,
+			elements: &elements,
+			T:        t,
+		}, nil
 	default:
-		return cmp.Compare(fmt.Sprintf("%v", i), fmt.Sprintf("%v", j)) < 0
+		return Series{}, UnsupportedTypeError
+
 	}
 }
 
-func (s *Series) Sort(function ...func(a, b interface{}) bool) {
-	if len(function) > 1 {
-		panic("too many functions")
-	}
-	if len(function) == 0 {
-		function = append(function, less)
-	}
-	sortFunc := function[0]
-	mergeSort(s, 0, s.Len()-1, sortFunc)
+func (s *Series) Len() int {
+	return s.elements.Len()
+}
+func (s *Series) String() string {
+	return s.elements.String()
+}
+func (s *Series) Sort(lessFuncs ...func(a, b int) bool) {
+	s.elements.Sort(lessFuncs...)
+}
+func (s *Series) Min() Element {
+	return s.elements.Min()
+}
+func (s *Series) Max() Element {
+	return s.elements.Max()
 
 }
-
-func (s Series) SortCopy(function ...func(a, b interface{}) bool) Series {
-	result := make(Series, len(s))
-	copy(result, s)
-	result.Sort(function...)
-	return result
+func (s *Series) Append(val interface{}) {
+	switch s.T.Kind() {
+	case reflect.Int64:
+		v := val.(int64)
+		elements := s.elements.(*intElements)
+		*elements = append(*elements, intElement{value: v})
+	case reflect.Float64:
+		v := val.(float64)
+		elements := s.elements.(*floatElements)
+		*elements = append(*elements, floatElement{value: v})
+	case reflect.String:
+		v := val.(string)
+		elements := s.elements.(*stringElements)
+		*elements = append(*elements, stringElement{value: v})
+	case reflect.Bool:
+		v := val.(bool)
+		elements := s.elements.(*boolElements)
+		*elements = append(*elements, boolElement{value: v})
+	default:
+		return
+	}
 }
-
-func merge(s *Series, left, mid, right int, sortFunc func(a, b interface{}) bool) {
-	n1 := mid - left + 1
-	n2 := right - mid
-	L := make(Series, n1)
-	R := make(Series, n2)
-	for i := 0; i < n1; i++ {
-		L[i] = (*s)[left+i]
-	}
-	for i := 0; i < n2; i++ {
-		R[i] = (*s)[mid+1+i]
-	}
-	i := 0
-	j := 0
-	k := left
-	for i < n1 && j < n2 {
-		if sortFunc(L[i], R[j]) {
-			(*s)[k] = L[i]
-			i++
-		} else {
-			(*s)[k] = R[j]
-			j++
-		}
-		k++
-	}
-	for i < n1 {
-		(*s)[k] = L[i]
-		i++
-		k++
-	}
-	for j < n2 {
-		(*s)[k] = R[j]
-		j++
-		k++
+func (s *Series) Get(i int) interface{} {
+	switch s.T.Kind() {
+	case reflect.Int64:
+		elements := s.elements.(*intElements)
+		return (*elements)[i].Get()
+	case reflect.Float64:
+		elements := s.elements.(*floatElements)
+		return (*elements)[i].Get()
+	case reflect.String:
+		elements := s.elements.(*stringElements)
+		return (*elements)[i].Get()
+	case reflect.Bool:
+		elements := s.elements.(*boolElements)
+		return (*elements)[i].Get()
+	default:
+		return nil
 	}
 }
 
-func mergeSort(s *Series, start, end int, sortFunc func(a, b interface{}) bool) {
-	if start < end {
-		mid := (start + end) / 2
-		mergeSort(s, start, mid, sortFunc)
-		mergeSort(s, mid+1, end, sortFunc)
-		merge(s, start, mid, end, sortFunc)
+func (s *Series) IsNaN(i int) bool {
+	switch s.T.Kind() {
+	case reflect.Int64:
+		elements := s.elements.(*intElements)
+		return (*elements)[i].IsNaN()
+	case reflect.Float64:
+		elements := s.elements.(*floatElements)
+		return (*elements)[i].IsNaN()
+	case reflect.String:
+		elements := s.elements.(*stringElements)
+		return (*elements)[i].IsNaN()
+	case reflect.Bool:
+		elements := s.elements.(*boolElements)
+		return (*elements)[i].IsNaN()
+	default:
+		return false
+	}
+}
+
+func (s *Series) Type() reflect.Type {
+	return s.T
+}
+
+func (s *Series) getName() string {
+	return s.Name
+}
+
+func (s *Series) setName(name string) {
+	s.Name = name
+}
+func (s *Series) Set(i int, v interface{}) {
+	switch s.T.Kind() {
+	case reflect.Int64:
+		elements := s.elements.(*intElements)
+		(*elements)[i].Set(v)
+	case reflect.Float64:
+		elements := s.elements.(*floatElements)
+		(*elements)[i].Set(v)
+	case reflect.String:
+		elements := s.elements.(*stringElements)
+		(*elements)[i].Set(v)
+	case reflect.Bool:
+		elements := s.elements.(*boolElements)
+		(*elements)[i].Set(v)
+	default:
+		return
 	}
 }
