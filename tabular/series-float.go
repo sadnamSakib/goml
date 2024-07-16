@@ -3,7 +3,6 @@ package tabular
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -54,16 +53,6 @@ func (s *floatElements) Head() string {
 
 }
 
-func (s *floatElements) Sort(lessFuncs ...func(a, b int) bool) {
-	if len(lessFuncs) == 0 {
-		sort.Slice(*s, func(i, j int) bool {
-			return (*s)[i].value < (*s)[j].value
-		})
-	} else {
-		sort.Slice(*s, lessFuncs[0])
-	}
-}
-
 func (s *floatElements) Min() Element {
 	if s.Len() == 0 {
 		panic("Cannot get min value from an empty column")
@@ -93,6 +82,28 @@ func (s *floatElements) Max() Element {
 func (s *floatElements) IsNan(i int) bool {
 	return (*s)[i].IsNaN()
 
+}
+func (s *floatElements) Tail() string {
+	length := len(*s)
+	if length > 5 {
+		length = 5
+	}
+	var sb strings.Builder
+	for i := length - 1; i >= 0; i-- {
+		if i < length-1 {
+			sb.WriteString(",")
+		}
+		if (*s)[i].IsNaN() {
+			sb.WriteString("NaN")
+		} else {
+			sb.WriteString(fmt.Sprintf("%v", (*s)[i].value))
+		}
+	}
+	return sb.String()
+
+}
+func (s *floatElements) Less(i, j int) bool {
+	return (*s)[i].value < (*s)[j].value
 }
 
 var _ Elements = (*floatElements)(nil)

@@ -3,7 +3,6 @@ package tabular
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -37,15 +36,24 @@ func (s *stringElements) IsNan(i int) bool {
 	return (*s)[i].IsNaN()
 
 }
-
-func (s *stringElements) Sort(lessFuncs ...func(a, b int) bool) {
-	if len(lessFuncs) == 0 {
-		sort.Slice(*s, func(i, j int) bool {
-			return (*s)[i].value < (*s)[j].value
-		})
-	} else {
-		sort.Slice(*s, lessFuncs[0])
+func (s *stringElements) Tail() string {
+	length := len(*s)
+	if length > 5 {
+		length = 5
 	}
+	var sb strings.Builder
+	for i := length; i > 0; i-- {
+		if i < length {
+			sb.WriteString(",")
+		}
+		if (*s)[i].IsNaN() {
+			sb.WriteString("NaN")
+		} else {
+			sb.WriteString(fmt.Sprintf("%v", (*s)[i].value))
+		}
+	}
+	return sb.String()
+
 }
 
 func (s *stringElements) Min() Element {
@@ -94,6 +102,9 @@ func (s *stringElements) Head() string {
 	}
 	return sb.String()
 
+}
+func (s *stringElements) Less(i, j int) bool {
+	return (*s)[i].value < (*s)[j].value
 }
 
 var _ Elements = (*stringElements)(nil)

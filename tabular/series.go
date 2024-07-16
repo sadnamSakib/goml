@@ -3,6 +3,7 @@ package tabular
 import (
 	"errors"
 	"reflect"
+	"sort"
 	"strconv"
 	"sync"
 )
@@ -130,9 +131,7 @@ func (s *Series) Len() int {
 func (s *Series) String() string {
 	return s.elements.String()
 }
-func (s *Series) Sort(lessFuncs ...func(a, b int) bool) {
-	s.elements.Sort(lessFuncs...)
-}
+
 func (s *Series) Min() Element {
 	return s.elements.Min()
 }
@@ -228,4 +227,95 @@ func (s *Series) Set(i int, v interface{}) {
 	default:
 		return
 	}
+}
+
+func (s *Series) GetRows(start, end int) Series {
+	var newSeries Series
+	newSeries.Name = s.Name
+	newSeries.T = s.T
+	for i := start; i < end; i++ {
+		newSeries.Append(s.Get(i))
+	}
+	return newSeries
+}
+
+func (s *Series) Copy() Series {
+	var newSeries Series = Series{
+		Name: s.Name,
+		T:    s.T,
+	}
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := make(intElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = intElement{value: s.Get(i).(int64)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(float64(0)):
+		elements := make(floatElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = floatElement{value: s.Get(i).(float64)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(""):
+		elements := make(stringElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = stringElement{value: s.Get(i).(string)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(true):
+		elements := make(boolElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = boolElement{value: s.Get(i).(bool)}
+		}
+		newSeries.elements = &elements
+	}
+
+	return newSeries
+}
+
+func (s *Series) SortBy(column Series) Series {
+	var newSeries = s.Copy()
+	length := s.Len()
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := make(intElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = intElement{value: s.Get(i).(int64)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(float64(0)):
+		elements := make(floatElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = floatElement{value: s.Get(i).(float64)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(""):
+		elements := make(stringElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = stringElement{value: s.Get(i).(string)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(true):
+		elements := make(boolElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = boolElement{value: s.Get(i).(bool)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+
+	}
+
+	return newSeries
 }

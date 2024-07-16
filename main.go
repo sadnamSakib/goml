@@ -21,11 +21,14 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(len(df))
 	fmt.Println(df.Head())
+	fmt.Println(df.Tail())
 	err = tabular.Write_CSV(df, "newcsv.csv")
 	if err != nil {
 		fmt.Println(err)
 	}
+	newDf := df.SortBy("Sex")
+	fmt.Println("here")
+	fmt.Println(newDf.Head())
 
 }
