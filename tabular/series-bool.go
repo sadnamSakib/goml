@@ -35,7 +35,7 @@ func (s *boolElements) Head() string {
 
 func (s *boolElements) String() string {
 	var sb strings.Builder
-
+	sb.WriteString("[")
 	for i := 0; i < s.Len(); i++ {
 		if i > 0 {
 			sb.WriteString(",")
@@ -47,6 +47,7 @@ func (s *boolElements) String() string {
 		}
 
 	}
+	sb.WriteString("]")
 	return sb.String()
 }
 

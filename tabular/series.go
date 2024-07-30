@@ -2,10 +2,13 @@ package tabular
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
 	"sync"
+
+	"github.com/sadnamSakib/goml/numerics"
 )
 
 var UnsupportedTypeError = errors.New("unsupported type")
@@ -129,7 +132,7 @@ func (s *Series) Len() int {
 	return s.elements.Len()
 }
 func (s *Series) String() string {
-	return s.elements.String()
+	return fmt.Sprintf("[%s]", s.elements.String())
 }
 
 func (s *Series) Min() Element {
@@ -318,4 +321,23 @@ func (s *Series) SortBy(column Series) Series {
 	}
 
 	return newSeries
+}
+
+func (s Series) Array() numerics.Array {
+	var a numerics.Array
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := s.elements.(*intElements)
+		for _, val := range *elements {
+			e := numerics.NewElement(float64(val.Get().(int64)), numerics.FloatType)
+			a.Append(e)
+		}
+	case reflect.TypeOf(float64(0)):
+		elements := s.elements.(*floatElements)
+		for _, val := range *elements {
+			e := numerics.NewElement(float64(val.Get().(float64)), numerics.FloatType)
+			a.Append(e)
+		}
+	}
+	return a
 }

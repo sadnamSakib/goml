@@ -7,7 +7,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/sadnamSakib/goml/numerics"
 )
 
 type DataFrame struct {
@@ -71,7 +72,7 @@ func sortColumns(df *DataFrame, columnNames []string) {
 }
 
 func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
-	startingTime := time.Now()
+
 	var df DataFrame = DataFrame{
 		columns: []Series{},
 		rows:    0,
@@ -152,8 +153,6 @@ func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
 		df.columns = append(df.columns, s)
 	}
 	sortColumns(&df, listOfColumns)
-	endingTime := time.Now()
-	fmt.Println("Time taken to read the file: ", endingTime.Sub(startingTime))
 
 	return df, nil
 }
@@ -261,7 +260,7 @@ func (df DataFrame) Tail() string {
 func (df DataFrame) GetColumn(columnName string) Series {
 	for _, val := range df.columns {
 		if val.Name == columnName {
-			return val
+			return val.Copy()
 		}
 	}
 	return Series{}
@@ -314,4 +313,19 @@ func (df DataFrame) SortBy(column string) DataFrame {
 		newDF.columns[i] = val.SortBy(sortByColumn)
 	}
 	return newDF
+}
+
+func (df DataFrame) RowNum() int {
+	return df.rows
+}
+func (df DataFrame) ColNum() int {
+	return df.cols
+}
+
+func (df DataFrame) GetColumnsAsArray(columnNames ...string) []numerics.Array {
+	arr := []numerics.Array{}
+	for _, val := range columnNames {
+		arr = append(arr, df.GetColumn(val).Array())
+	}
+	return arr
 }
