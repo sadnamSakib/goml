@@ -17,6 +17,13 @@ type DataFrame struct {
 	cols    int
 }
 
+func (df DataFrame) GetRowNum() int {
+	return df.rows
+}
+func (df DataFrame) GetColNum() int {
+	return df.cols
+}
+
 func rowSplitter(line string) []string {
 
 	row := []string{}
@@ -191,7 +198,7 @@ func (df DataFrame) String() string {
 
 	var sb strings.Builder
 	for key, val := range df.columns {
-		sb.WriteString(fmt.Sprintf("%s: ", key))
+		sb.WriteString(fmt.Sprintf("%v: ", key))
 		sb.WriteString(val.String())
 		sb.WriteString("\n")
 	}
@@ -281,13 +288,22 @@ func (df DataFrame) GetColumns(columnNames ...string) DataFrame {
 func (df DataFrame) GetRows(startingRow, endingRow int) DataFrame {
 	var newDF DataFrame = DataFrame{
 		columns: []Series{},
-		rows:    endingRow - startingRow + 1,
+		rows:    endingRow - startingRow,
 		cols:    df.cols,
 	}
+
 	for _, val := range df.columns {
 		newDF.columns = append(newDF.columns, val.GetRows(startingRow, endingRow))
 	}
 	return newDF
+}
+
+func (df DataFrame) GetRow(index int) DataFrame {
+	return df.GetRows(index, index)
+}
+
+func (df DataFrame) Get(row, col int) interface{} {
+	return df.columns[col].elements.Get(row)
 }
 
 func (df DataFrame) SortBy(column string) DataFrame {
@@ -328,4 +344,22 @@ func (df DataFrame) GetColumnsAsArray(columnNames ...string) []numerics.Array {
 		arr = append(arr, df.GetColumn(val).Array())
 	}
 	return arr
+}
+
+func (df DataFrame) TrainTestSplit(testSize float64) (DataFrame, DataFrame) {
+	if testSize > 1 || testSize < 0 {
+		panic("test size should be between 0 and 1")
+	}
+	testRows := int(float64(df.rows) * testSize)
+	trainRows := df.rows - testRows
+
+	return df.GetRows(0, trainRows), df.GetRows(trainRows, df.rows)
+}
+
+func (df DataFrame) Shape() (int, int) {
+	return df.rows, df.cols
+}
+
+func (df DataFrame) Mean(columnName string) float64 {
+	return df.GetColumn(columnName).Mean()
 }

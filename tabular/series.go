@@ -143,21 +143,39 @@ func (s *Series) Max() Element {
 
 }
 func (s *Series) Append(val interface{}) {
+
 	switch s.T.Kind() {
 	case reflect.Int64:
 		v := val.(int64)
+		if s.elements == nil {
+			elements := make(intElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*intElements)
 		*elements = append(*elements, intElement{value: v})
 	case reflect.Float64:
 		v := val.(float64)
+		if s.elements == nil {
+			elements := make(floatElements, 0)
+			s.elements = &elements
+		}
+
 		elements := s.elements.(*floatElements)
 		*elements = append(*elements, floatElement{value: v})
 	case reflect.String:
 		v := val.(string)
+		if s.elements == nil {
+			elements := make(stringElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*stringElements)
 		*elements = append(*elements, stringElement{value: v})
 	case reflect.Bool:
 		v := val.(bool)
+		if s.elements == nil {
+			elements := make(boolElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*boolElements)
 		*elements = append(*elements, boolElement{value: v})
 	default:
@@ -165,6 +183,7 @@ func (s *Series) Append(val interface{}) {
 	}
 }
 func (s *Series) Get(i int) interface{} {
+
 	switch s.T.Kind() {
 	case reflect.Int64:
 		elements := s.elements.(*intElements)
@@ -179,6 +198,7 @@ func (s *Series) Get(i int) interface{} {
 		elements := s.elements.(*boolElements)
 		return (*elements)[i].Get()
 	default:
+		fmt.Println("Default")
 		return nil
 	}
 }
@@ -340,4 +360,21 @@ func (s Series) Array() numerics.Array {
 		}
 	}
 	return a
+}
+
+func (s Series) Mean() float64 {
+	var sum float64
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := s.elements.(*intElements)
+		for _, val := range *elements {
+			sum += float64(val.Get().(int64))
+		}
+	case reflect.TypeOf(float64(0)):
+		elements := s.elements.(*floatElements)
+		for _, val := range *elements {
+			sum += val.Get().(float64)
+		}
+	}
+	return sum / float64(s.Len())
 }

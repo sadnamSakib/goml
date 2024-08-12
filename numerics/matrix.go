@@ -9,63 +9,50 @@ import (
 )
 
 var invalidRowColumnError = errors.New("Invalid number of rows or columns")
-var invalidTypeError = errors.New("Invalid type, element type should be float or int")
 
 type Matrix struct {
-	RowNum int
-	ColNum int
+	rowNum int
+	colNum int
 	rows   []Array
-	t      dtype
 }
 
 func NewMatrix(row, col int, rows []Array) (Matrix, error) {
-	if row <= 0 || col <= 0 {
+
+	if row <= 0 || col <= 0 || len(rows) != row {
 		return Matrix{}, invalidRowColumnError
 	}
 	isOfTypeFloat := 0
-	isOfTypeInt := 0
-	for _, row := range rows {
+	for i, row := range rows {
 		if row.IsOfType(FloatType) {
 			isOfTypeFloat++
+		} else {
+			rows[i] = convertToFloat(row)
 		}
-		if row.IsOfType(IntType) {
-			isOfTypeInt++
+		if len(row) != col {
+			return Matrix{}, invalidRowColumnError
 		}
 
-	}
-	numOfRows := len(rows)
-
-	if isOfTypeFloat != numOfRows && isOfTypeInt != numOfRows && isOfTypeFloat+isOfTypeInt != numOfRows {
-
-		return Matrix{}, invalidTypeError
 	}
 
 	m := Matrix{
-		RowNum: row,
-		ColNum: col,
+		rowNum: row,
+		colNum: col,
 		rows:   rows,
 	}
-	if isOfTypeFloat == numOfRows {
-		m.t = FloatType
-	} else {
-		m.t = IntType
-	}
-
 	return m, nil
 }
 
 func (m Matrix) Copy() Matrix {
 
-	rows := make([]Array, m.RowNum)
+	rows := make([]Array, m.RowNum())
 	for i := 0; i < len(m.rows); i++ {
 		rows[i] = m.rows[i].Copy()
 	}
-	// fmt.Println("Rows", rows)
+
 	return Matrix{
-		RowNum: m.RowNum,
-		ColNum: m.ColNum,
+		rowNum: m.RowNum(),
+		colNum: m.ColNum(),
 		rows:   rows,
-		t:      m.t,
 	}
 
 }
@@ -79,73 +66,77 @@ func (m Matrix) String() string {
 	return sb.String()
 }
 
-func (m Matrix) GetRow(r int) Array {
-	return m.rows[r]
+func (m Matrix) GetRow(r int) Matrix {
+	return Matrix{
+		rowNum: 1,
+		colNum: m.ColNum(),
+		rows:   []Array{m.rows[r]},
+	}
 }
 func (m Matrix) GetRows(s, e int) Matrix {
 	newm := Matrix{
-		RowNum: e - s,
-		ColNum: m.ColNum,
+		rowNum: e - s,
+		colNum: m.ColNum(),
 		rows:   m.rows[s:e],
-		t:      m.t,
 	}
 	return newm
 }
-func (m Matrix) GetColumn(c int) Array {
-	var a Array
-
-	for _, row := range m.rows {
-		e := Element{
-			dtype: row[c].dtype,
-			value: row[c].value,
-			nan:   row[c].nan,
-		}
-		a.Append(e)
+func (m Matrix) GetColumn(c int) Matrix {
+	newm := Matrix{
+		rowNum: m.RowNum(),
+		colNum: 1,
+		rows:   make([]Array, m.RowNum()),
 	}
-	return a
+	for i := 0; i < m.RowNum(); i++ {
+		newm.rows[i] = make([]Element, 1)
+		newm.rows[i][0] = m.rows[i][c]
+	}
+	return newm
 }
 
 func (m Matrix) GetColumns(s, e int) Matrix {
 	newM := Matrix{
-		t:      m.t,
-		RowNum: e - s,
-		ColNum: m.RowNum,
-		rows:   make([]Array, e-s),
+		rowNum: m.RowNum(),
+		colNum: e - s,
+		rows:   make([]Array, m.RowNum()),
 	}
 	for i := 0; i < e-s; i++ {
-		newM.rows[i] = m.GetColumn(s + i)
+		for j := 0; j < m.RowNum(); j++ {
+			newM.rows[j] = append(newM.rows[j], m.rows[j][s+i])
+		}
 	}
 	return newM
 }
 
 func (m Matrix) Transpose() Matrix {
 	newM := Matrix{
-		t:      m.t,
-		RowNum: m.ColNum,
-		ColNum: m.RowNum,
-		rows:   make([]Array, m.ColNum),
+		rowNum: m.ColNum(),
+		colNum: m.RowNum(),
+		rows:   make([]Array, m.ColNum()),
 	}
-	for i := 0; i < m.ColNum; i++ {
-		newM.rows[i] = m.GetColumn(i)
+	for i := 0; i < m.ColNum(); i++ {
+		newM.rows[i] = make([]Element, m.RowNum())
+		for j := 0; j < m.RowNum(); j++ {
+			newM.rows[i][j] = m.rows[j][i]
+		}
 	}
 	return newM
 }
 
 func (m Matrix) Minor(i, j int) Matrix {
 	minor := Matrix{
-		RowNum: m.RowNum - 1,
-		ColNum: m.ColNum - 1,
-		rows:   make([]Array, m.RowNum-1),
-		t:      m.t,
+		rowNum: m.RowNum() - 1,
+		colNum: m.ColNum() - 1,
+		rows:   make([]Array, m.RowNum()-1),
 	}
 	minorRow := 0
-	for row := 0; row < m.RowNum; row++ {
+	for row := 0; row < m.RowNum(); row++ {
 		if row == i {
 			continue
 		}
-		minor.rows[minorRow] = make([]Element, m.ColNum-1)
+		minor.rows[minorRow] = make([]Element, m.ColNum()-1)
 		minorCol := 0
-		for col := 0; col < m.ColNum; col++ {
+		for col := 0; col < m.ColNum(); col++ {
 			if col == j {
 				continue
 			}
@@ -160,21 +151,20 @@ func (m Matrix) Minor(i, j int) Matrix {
 
 func (m Matrix) Adjoint() Matrix {
 	m2 := Matrix{
-		RowNum: m.RowNum,
-		ColNum: m.ColNum,
-		rows:   make([]Array, m.RowNum),
-		t:      m.t,
+		rowNum: m.RowNum(),
+		colNum: m.ColNum(),
+		rows:   make([]Array, m.RowNum()),
 	}
 
-	for i := 0; i < m.RowNum; i++ {
-		for j := 0; j < m.ColNum; j++ {
+	for i := 0; i < m.RowNum(); i++ {
+		for j := 0; j < m.ColNum(); j++ {
 			sign := 1.0
 			if (i+j)%2 != 0 {
 				sign = -sign
 			}
-			d, _ := DetWithLU(m.Minor(i, j))
+			d, _ := m.Minor(i, j).Det()
 			m2.rows[i].Append(Element{
-				dtype: m.t,
+				dtype: FloatType,
 				value: sign * d,
 			})
 		}
@@ -184,10 +174,10 @@ func (m Matrix) Adjoint() Matrix {
 }
 
 func (m Matrix) Inverse() (Matrix, error) {
-	if m.RowNum != m.ColNum {
+	if m.RowNum() != m.ColNum() {
 		return Matrix{}, errors.New("Matrix is not square")
 	}
-	d, err := DetWithLU(m) // We get matrix is singular error here because of concurrency issue
+	d, err := m.Det() // We get matrix is singular error here because of concurrency issue
 
 	if err != nil {
 		return Matrix{}, err
@@ -221,7 +211,7 @@ func getValueAsFloat64(e Element) float64 {
 func GaussianElim(A Matrix) (Matrix, error) {
 	m := (A.Copy()) // The copy function is not copying the actual values
 
-	n := m.RowNum
+	n := m.RowNum()
 
 	for j := 0; j < n; j++ {
 		if getValueAsFloat64(m.rows[j][j]) == 0.0 {
@@ -264,8 +254,8 @@ func GaussianElim(A Matrix) (Matrix, error) {
 	return m, nil
 }
 
-func DetWithLU(A Matrix) (float64, error) {
-	if A.ColNum != A.RowNum {
+func (A Matrix) Det() (float64, error) {
+	if A.ColNum() != A.RowNum() {
 		return 0.0, errors.New("Not a square matrix")
 	}
 	U, err := GaussianElim(A)
@@ -274,7 +264,7 @@ func DetWithLU(A Matrix) (float64, error) {
 		return 0.0, err
 	}
 	det := 1.0
-	for i := 0; i < A.RowNum; i++ {
+	for i := 0; i < A.RowNum(); i++ {
 		det *= getValueAsFloat64(U.rows[i][i])
 	}
 
@@ -302,38 +292,42 @@ func multiplyRowByColumn(row, col Array, e *Element) {
 }
 
 func rowMultiplication(row, col int, m1, m2, m *Matrix, w *sync.WaitGroup, sem chan struct{}) {
-	// w.Add(1)
-
 	defer w.Done()
 
 	defer func() { <-sem }()
 	for j := 0; j < col; j++ {
-		multiplyRowByColumn(m1.GetRow(row), m2.GetColumn(j), &(m.rows[row][j]))
+		var r Array
+		for i := 0; i < m1.ColNum(); i++ {
+			r = append(r, m1.rows[row][i])
+		}
+		var c Array
+		for i := 0; i < m2.RowNum(); i++ {
+			c = append(c, m2.rows[i][j])
+		}
+		multiplyRowByColumn(r, c, &(m.rows[row][j]))
 	}
 }
 
 func Multiply(m1 Matrix, m2 Matrix) (Matrix, error) {
 
-	if m1.ColNum != m2.RowNum {
+	if m1.ColNum() != m2.RowNum() {
 		return Matrix{}, errors.New("Number of columns on LHS does not match number of rows on RHS")
 	}
 	w := sync.WaitGroup{}
 	m := Matrix{
-		RowNum: m1.RowNum,
-		ColNum: m2.ColNum,
-		rows:   make([]Array, m1.RowNum),
-		t:      m1.t,
+		rowNum: m1.RowNum(),
+		colNum: m2.ColNum(),
+		rows:   make([]Array, m1.RowNum()),
 	}
-	sem := make(chan struct{}, m1.RowNum)
-	for i := 0; i < m1.RowNum; i++ {
-		m.rows[i] = Zeros(m2.ColNum)
+	sem := make(chan struct{}, m1.RowNum())
+	for i := 0; i < m1.RowNum(); i++ {
+		m.rows[i] = Zeros(m2.ColNum())
 	}
 
-	for i := 0; i < m1.RowNum; i++ {
-		// Acquire a semaphore
+	for i := 0; i < m1.RowNum(); i++ {
 		w.Add(1)
 		sem <- struct{}{}
-		go rowMultiplication(i, m2.ColNum, &m1, &m2, &m, &w, sem)
+		go rowMultiplication(i, m2.ColNum(), &m1, &m2, &m, &w, sem)
 	}
 
 	w.Wait()
@@ -346,34 +340,27 @@ func Multiply(m1 Matrix, m2 Matrix) (Matrix, error) {
 func rowAddition(row int, m1, m2, m *Matrix, w *sync.WaitGroup) {
 	w.Add(1)
 	defer w.Done()
-	for j := 0; j < m1.ColNum; j++ {
+	for j := 0; j < m1.ColNum(); j++ {
 		e := Element{}
-		if m1.rows[row][j].dtype == FloatType {
-			e.value = m1.rows[row][j].value.(float64) + m2.rows[row][j].value.(float64)
-			e.dtype = FloatType
-		} else {
-			e.value = m1.rows[row][j].value.(int64) + m2.rows[row][j].value.(int64)
-			e.dtype = IntType
-		}
+		e.value = m1.rows[row][j].value.(float64) + m2.rows[row][j].value.(float64)
+		e.dtype = FloatType
 		m.rows[row].Append(e)
 	}
 }
 
 func Subtract(m1, m2 Matrix) (Matrix, error) {
-
-	if m1.RowNum != m2.RowNum || m1.ColNum != m2.ColNum {
+	if m1.RowNum() != m2.RowNum() || m1.ColNum() != m2.ColNum() {
 		return Matrix{}, errors.New("Invalid number of rows or columns")
 	}
 	m := Matrix{
-		RowNum: m1.RowNum,
-		ColNum: m1.ColNum,
-		rows:   make([]Array, m1.RowNum),
-		t:      m1.t,
+		rowNum: m1.RowNum(),
+		colNum: m1.ColNum(),
+		rows:   make([]Array, m1.RowNum()),
 	}
 	w := sync.WaitGroup{}
 	sem := make(chan struct{}, runtime.NumCPU()*16)
 
-	for i := 0; i < m1.RowNum; i++ {
+	for i := 0; i < m1.RowNum(); i++ {
 		sem <- struct{}{}
 		go func(row int) {
 			defer func() { <-sem }()
@@ -387,7 +374,7 @@ func Subtract(m1, m2 Matrix) (Matrix, error) {
 func rowSubtraction(row int, m1, m2, m *Matrix, w *sync.WaitGroup) {
 	w.Add(1)
 	defer w.Done()
-	for j := 0; j < m1.ColNum; j++ {
+	for j := 0; j < m1.ColNum(); j++ {
 		e := Element{}
 		if m1.rows[row][j].dtype == FloatType {
 			e.value = m1.rows[row][j].value.(float64) + m2.rows[row][j].value.(float64)
@@ -402,19 +389,18 @@ func rowSubtraction(row int, m1, m2, m *Matrix, w *sync.WaitGroup) {
 
 func Add(m1, m2 Matrix) (Matrix, error) {
 
-	if m1.RowNum != m2.RowNum || m1.ColNum != m2.ColNum {
+	if m1.RowNum() != m2.RowNum() || m1.ColNum() != m2.ColNum() {
 		return Matrix{}, errors.New("Invalid number of rows or columns")
 	}
 	m := Matrix{
-		RowNum: m1.RowNum,
-		ColNum: m1.ColNum,
-		rows:   make([]Array, m1.RowNum),
-		t:      m1.t,
+		rowNum: m1.RowNum(),
+		colNum: m1.ColNum(),
+		rows:   make([]Array, m1.RowNum()),
 	}
 	w := sync.WaitGroup{}
 	sem := make(chan struct{}, runtime.NumCPU()*16)
 
-	for i := 0; i < m1.RowNum; i++ {
+	for i := 0; i < m1.RowNum(); i++ {
 		sem <- struct{}{}
 		go func(row int) {
 			defer func() { <-sem }()
@@ -440,21 +426,20 @@ func pow(val interface{}, p int) float64 {
 
 func Power(m1 Matrix, p int) (Matrix, error) {
 	m := Matrix{
-		RowNum: m1.RowNum,
-		ColNum: m1.ColNum,
-		rows:   make([]Array, m1.RowNum),
-		t:      FloatType,
+		rowNum: m1.RowNum(),
+		colNum: m1.ColNum(),
+		rows:   make([]Array, m1.RowNum()),
 	}
 	w := sync.WaitGroup{}
 	sem := make(chan struct{}, runtime.NumCPU()*16)
 
-	for i := 0; i < m1.RowNum; i++ {
+	for i := 0; i < m1.RowNum(); i++ {
 		sem <- struct{}{}
 		go func(row int) {
 			defer func() { <-sem }()
 			w.Add(1)
 			defer w.Done()
-			for j := 0; j < m1.ColNum; j++ {
+			for j := 0; j < m1.ColNum(); j++ {
 				e := Element{}
 				if m1.rows[row][j].dtype == FloatType {
 					e.value = pow(m1.rows[row][j].value, p)
@@ -472,7 +457,7 @@ func Power(m1 Matrix, p int) (Matrix, error) {
 }
 
 func (m *Matrix) SetColumn(col int, a Array) {
-	for i := 0; i < m.RowNum; i++ {
+	for i := 0; i < m.RowNum(); i++ {
 		(*m).rows[i][col] = a[i]
 
 	}
@@ -480,17 +465,16 @@ func (m *Matrix) SetColumn(col int, a Array) {
 }
 
 func AppendX(m1, m2 Matrix) (Matrix, error) {
-	if m1.RowNum != m2.RowNum {
+	if m1.RowNum() != m2.RowNum() {
 		return Matrix{}, errors.New("Invalid number of rows")
 	}
 	m := Matrix{
-		RowNum: m1.RowNum,
-		ColNum: m1.ColNum + m2.ColNum,
-		rows:   make([]Array, m1.RowNum),
-		t:      m1.t,
+		rowNum: m1.RowNum(),
+		colNum: m1.ColNum() + m2.ColNum(),
+		rows:   make([]Array, m1.RowNum()),
 	}
 
-	for i := 0; i < m1.RowNum; i++ {
+	for i := 0; i < m1.RowNum(); i++ {
 
 		m.rows[i] = append(m1.rows[i], m2.rows[i]...)
 	}
@@ -499,28 +483,27 @@ func AppendX(m1, m2 Matrix) (Matrix, error) {
 }
 
 func AppendY(m1, m2 Matrix) (Matrix, error) {
-	if m1.ColNum != m2.ColNum {
+	if m1.ColNum() != m2.ColNum() {
 		return Matrix{}, errors.New("Invalid number of rows")
 	}
 	m := Matrix{
-		RowNum: m1.RowNum + m2.RowNum,
-		ColNum: m1.ColNum,
-		rows:   make([]Array, m1.RowNum+m2.RowNum),
-		t:      m1.t,
+		rowNum: m1.RowNum() + m2.RowNum(),
+		colNum: m1.ColNum(),
+		rows:   make([]Array, m1.RowNum()+m2.RowNum()),
 	}
-	for i := 0; i < m1.RowNum; i++ {
+	for i := 0; i < m1.RowNum(); i++ {
 		m.rows[i] = m1.rows[i]
 	}
-	for i := 0; i < m2.RowNum; i++ {
-		m.rows[m1.RowNum+i] = m2.rows[i]
+	for i := 0; i < m2.RowNum(); i++ {
+		m.rows[m1.RowNum()+i] = m2.rows[i]
 	}
 
 	return m, nil
 }
 
 func (m Matrix) ScalarMultiplication(a float64) Matrix {
-	for i := 0; i < m.RowNum; i++ {
-		for j := 0; j < m.ColNum; j++ {
+	for i := 0; i < m.RowNum(); i++ {
+		for j := 0; j < m.ColNum(); j++ {
 			if m.rows[i][j].dtype == FloatType {
 				m.rows[i][j].value = m.rows[i][j].value.(float64) * a
 			} else {
@@ -529,4 +512,33 @@ func (m Matrix) ScalarMultiplication(a float64) Matrix {
 		}
 	}
 	return m
+}
+
+func (m Matrix) RowNum() int {
+	return m.rowNum
+}
+func (m Matrix) ColNum() int {
+	return m.colNum
+}
+
+func (m Matrix) Shape() (int, int) {
+	return m.RowNum(), m.ColNum()
+}
+
+func (m Matrix) Get(i, j int) float64 {
+	return m.rows[i][j].value.(float64)
+}
+
+func Equal(m1, m2 Matrix) bool {
+	if m1.RowNum() != m2.RowNum() || m1.ColNum() != m2.ColNum() {
+		return false
+	}
+	for i := range m1.rows {
+		for j := range m1.rows[i] {
+			if abs(m1.Get(i, j)-m2.Get(i, j)) > 0.000001 {
+				return false
+			}
+		}
+	}
+	return true
 }

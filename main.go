@@ -13,6 +13,8 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Println(df.Head())
+	df = df.SortBy("RAM")
+	fmt.Println(df.Head())
 
 	regr, err := regressor.LinearRegression(df, []string{"Ratings", "Battery_Power", "RAM"}, "Price")
 	if err != nil {
@@ -27,6 +29,6 @@ func main() {
 	fmt.Println("Correlation with Mobile Size: ", regr.Correlation("Mobile_Size"))
 	fmt.Println("Correlation with Primary Cam: ", regr.Correlation("Primary_Cam"))
 	fmt.Println("Correlation with Selfi Cam: ", regr.Correlation("Selfi_Cam"))
-	regr.Plot2D("RAM")
+	regr.Plot2D("Battry_Power")
 
 }

@@ -10,7 +10,6 @@ type dtype int
 const (
 	IntType dtype = iota
 	FloatType
-	StringType
 	BoolType
 	ArrayType
 )
@@ -36,19 +35,19 @@ func (e *Element) Set(v interface{}) {
 	e.value = v
 }
 
-func (e *Element) Get() interface{} {
+func (e Element) Get() interface{} {
 	return e.value
 }
 
-func (e *Element) IsNaN() bool {
+func (e Element) IsNaN() bool {
 	return e.nan
 }
 
-func (e *Element) Type() dtype {
+func (e Element) Type() dtype {
 	return e.dtype
 }
 
-func (e *Element) String() string {
+func (e Element) String() string {
 	var sb strings.Builder
 	switch e.dtype {
 	case ArrayType:

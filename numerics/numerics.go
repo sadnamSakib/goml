@@ -85,3 +85,25 @@ func Zeros(size ...int) Array {
 		panic("Zeros function only accepts 1 or 2 arguments")
 	}
 }
+
+func convertToFloat(a Array) Array {
+	var b Array
+	if a.GetType() == IntType {
+		for _, v := range a {
+			b = append(b, Element{dtype: FloatType, value: float64(v.Get().(int64))})
+		}
+	} else if a.GetType() == BoolType {
+		for _, v := range a {
+			value := 0.0
+			if v.Get().(bool) {
+				value = 1.0
+			}
+			b = append(b, Element{dtype: FloatType, value: value})
+		}
+	} else if a.GetType() == FloatType {
+		b = a
+	} else {
+		panic("Array is not of type int or bool")
+	}
+	return b
+}

@@ -1,12 +1,14 @@
 package numerics
 
 import (
+	"math"
+	"reflect"
 	"strings"
 )
 
 type Array []Element
 
-func (a *Array) Len() int { return len(*a) }
+func (a Array) Len() int { return len(a) }
 
 func (a Array) Mean() float64 {
 	if !a.IsOfType(FloatType) && !a.IsOfType(IntType) {
@@ -29,17 +31,11 @@ func (a Array) Std() float64 {
 		panic("Array is not of type float or int ")
 	}
 	mean := a.Mean()
-
 	sum := 0.0
 	for _, v := range a {
-		if v.dtype == FloatType {
-			sum += (v.value.(float64) - mean) * (v.value.(float64) - mean)
-		} else {
-			sum += float64(v.value.(int)-int(mean)) * float64(v.value.(int)-int(mean))
-		}
+		sum += (v.value.(float64) - mean) * (v.value.(float64) - mean)
 	}
-
-	return sum / float64(a.Len())
+	return math.Sqrt(sum / float64(a.Len()))
 }
 
 func splitter(s string) []string {
@@ -93,8 +89,8 @@ func (a *Array) Append(e Element) {
 	*a = append(*a, e)
 }
 
-func (a *Array) IsOfType(t dtype) bool {
-	for _, v := range *a {
+func (a Array) IsOfType(t dtype) bool {
+	for _, v := range a {
 		if v.dtype != t {
 			return false
 		}
@@ -102,39 +98,39 @@ func (a *Array) IsOfType(t dtype) bool {
 	return true
 }
 
-func (a *Array) ScalarMultiplication(v float64) {
+func (a Array) ScalarMultiplication(v float64) {
 	if !a.IsOfType(FloatType) {
 		panic("Array is not of type float")
 	}
-	for i := range *a {
-		(*a)[i].value = (*a)[i].value.(float64) * v
+	for i := range a {
+		(a)[i].value = (a)[i].value.(float64) * v
 	}
 }
 
-func (a *Array) ScalarAddition(v float64) {
+func (a Array) ScalarAddition(v float64) {
 	if !a.IsOfType(FloatType) {
 		panic("Array is not of type float")
 	}
-	for i := range *a {
-		(*a)[i].value = (*a)[i].value.(float64) + v
+	for i := range a {
+		(a)[i].value = (a)[i].value.(float64) + v
 	}
 }
 
-func (a *Array) ScalarSubtraction(v float64) {
+func (a Array) ScalarSubtraction(v float64) {
 	if !a.IsOfType(FloatType) {
 		panic("Array is not of type float")
 	}
-	for i := range *a {
-		(*a)[i].value = (*a)[i].value.(float64) - v
+	for i := range a {
+		(a)[i].value = (a)[i].value.(float64) - v
 	}
 }
 
-func (a *Array) ScalarDivision(v float64) {
+func (a Array) ScalarDivision(v float64) {
 	if !a.IsOfType(FloatType) {
 		panic("Array is not of type float")
 	}
-	for i := range *a {
-		(*a)[i].value = (*a)[i].value.(float64) / v
+	for i := range a {
+		(a)[i].value = (a)[i].value.(float64) / v
 	}
 }
 func (a Array) Max() float64 {
@@ -168,16 +164,34 @@ func (a Array) Copy() Array {
 	return b
 }
 
-func (a Array) Normalize() Array {
-	b := a.Copy()
-	if !b.IsOfType(FloatType) {
-		panic("Array is not of type float")
-	}
-	max := b.Max()
-	min := b.Min()
-	diff := max - min
-	b.ScalarSubtraction(min)
-	b.ScalarDivision(diff)
+func (a Array) GetType() dtype {
+	return a[0].dtype
+}
 
-	return b
+func (a Array) Get(i int) interface{} {
+	return a[i].value
+}
+
+func (a *Array) Set(i int64, v interface{}) {
+	dTypeOfArray := a.GetType()
+	dTypeOfValue := reflect.TypeOf(v)
+	if dTypeOfArray == IntType && dTypeOfValue == reflect.TypeOf(int(int64(0))) {
+		(*a)[i].value = int64(v.(int))
+
+	} else if dTypeOfArray == FloatType && dTypeOfValue == reflect.TypeOf(float64(0)) {
+		(*a)[i].value = v.(float64)
+
+	} else if dTypeOfArray == BoolType && dTypeOfValue == reflect.TypeOf(true) {
+		(*a)[i].value = v.(bool)
+
+	} else if dTypeOfArray == ArrayType && dTypeOfValue == reflect.TypeOf(Array{}) {
+		e := []Element{}
+		for _, val := range v.(Array) {
+			elem := Element{dtype: val.dtype, value: val.value}
+			e = append(e, elem)
+		}
+		(*a)[i].value = e
+	} else {
+		panic("Type mismatch")
+	}
 }
