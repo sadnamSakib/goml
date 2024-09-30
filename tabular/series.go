@@ -2,9 +2,13 @@ package tabular
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"sync"
+
+	"github.com/sadnamSakib/goml/numerics"
 )
 
 var UnsupportedTypeError = errors.New("unsupported type")
@@ -128,11 +132,9 @@ func (s *Series) Len() int {
 	return s.elements.Len()
 }
 func (s *Series) String() string {
-	return s.elements.String()
+	return fmt.Sprintf("[%s]", s.elements.String())
 }
-func (s *Series) Sort(lessFuncs ...func(a, b int) bool) {
-	s.elements.Sort(lessFuncs...)
-}
+
 func (s *Series) Min() Element {
 	return s.elements.Min()
 }
@@ -141,21 +143,39 @@ func (s *Series) Max() Element {
 
 }
 func (s *Series) Append(val interface{}) {
+
 	switch s.T.Kind() {
 	case reflect.Int64:
 		v := val.(int64)
+		if s.elements == nil {
+			elements := make(intElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*intElements)
 		*elements = append(*elements, intElement{value: v})
 	case reflect.Float64:
 		v := val.(float64)
+		if s.elements == nil {
+			elements := make(floatElements, 0)
+			s.elements = &elements
+		}
+
 		elements := s.elements.(*floatElements)
 		*elements = append(*elements, floatElement{value: v})
 	case reflect.String:
 		v := val.(string)
+		if s.elements == nil {
+			elements := make(stringElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*stringElements)
 		*elements = append(*elements, stringElement{value: v})
 	case reflect.Bool:
 		v := val.(bool)
+		if s.elements == nil {
+			elements := make(boolElements, 0)
+			s.elements = &elements
+		}
 		elements := s.elements.(*boolElements)
 		*elements = append(*elements, boolElement{value: v})
 	default:
@@ -163,6 +183,7 @@ func (s *Series) Append(val interface{}) {
 	}
 }
 func (s *Series) Get(i int) interface{} {
+
 	switch s.T.Kind() {
 	case reflect.Int64:
 		elements := s.elements.(*intElements)
@@ -177,6 +198,7 @@ func (s *Series) Get(i int) interface{} {
 		elements := s.elements.(*boolElements)
 		return (*elements)[i].Get()
 	default:
+		fmt.Println("Default")
 		return nil
 	}
 }
@@ -228,4 +250,131 @@ func (s *Series) Set(i int, v interface{}) {
 	default:
 		return
 	}
+}
+
+func (s *Series) GetRows(start, end int) Series {
+	var newSeries Series
+	newSeries.Name = s.Name
+	newSeries.T = s.T
+	for i := start; i < end; i++ {
+		newSeries.Append(s.Get(i))
+	}
+	return newSeries
+}
+
+func (s *Series) Copy() Series {
+	var newSeries Series = Series{
+		Name: s.Name,
+		T:    s.T,
+	}
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := make(intElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = intElement{value: s.Get(i).(int64)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(float64(0)):
+		elements := make(floatElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = floatElement{value: s.Get(i).(float64)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(""):
+		elements := make(stringElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = stringElement{value: s.Get(i).(string)}
+		}
+		newSeries.elements = &elements
+	case reflect.TypeOf(true):
+		elements := make(boolElements, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			elements[i] = boolElement{value: s.Get(i).(bool)}
+		}
+		newSeries.elements = &elements
+	}
+
+	return newSeries
+}
+
+func (s *Series) SortBy(column Series) Series {
+	var newSeries = s.Copy()
+	length := s.Len()
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := make(intElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = intElement{value: s.Get(i).(int64)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(float64(0)):
+		elements := make(floatElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = floatElement{value: s.Get(i).(float64)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(""):
+		elements := make(stringElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = stringElement{value: s.Get(i).(string)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+	case reflect.TypeOf(true):
+		elements := make(boolElements, length)
+		for i := 0; i < length; i++ {
+			elements[i] = boolElement{value: s.Get(i).(bool)}
+		}
+		sort.Slice(elements, func(i, j int) bool {
+			return column.elements.Less(i, j)
+		})
+		newSeries.elements = &elements
+
+	}
+
+	return newSeries
+}
+
+func (s Series) Array() numerics.Array {
+	var a numerics.Array
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := s.elements.(*intElements)
+		for _, val := range *elements {
+			e := numerics.NewElement(float64(val.Get().(int64)), numerics.FloatType)
+			a.Append(e)
+		}
+	case reflect.TypeOf(float64(0)):
+		elements := s.elements.(*floatElements)
+		for _, val := range *elements {
+			e := numerics.NewElement(float64(val.Get().(float64)), numerics.FloatType)
+			a.Append(e)
+		}
+	}
+	return a
+}
+
+func (s Series) Mean() float64 {
+	var sum float64
+	switch s.T {
+	case reflect.TypeOf(int64(0)):
+		elements := s.elements.(*intElements)
+		for _, val := range *elements {
+			sum += float64(val.Get().(int64))
+		}
+	case reflect.TypeOf(float64(0)):
+		elements := s.elements.(*floatElements)
+		for _, val := range *elements {
+			sum += val.Get().(float64)
+		}
+	}
+	return sum / float64(s.Len())
 }

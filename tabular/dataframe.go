@@ -7,10 +7,22 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/sadnamSakib/goml/numerics"
 )
 
-type DataFrame map[string]Series
+type DataFrame struct {
+	columns []Series
+	rows    int
+	cols    int
+}
+
+func (df DataFrame) GetRowNum() int {
+	return df.rows
+}
+func (df DataFrame) GetColNum() int {
+	return df.cols
+}
 
 func rowSplitter(line string) []string {
 
@@ -49,9 +61,30 @@ func rowSplitter(line string) []string {
 	return row
 }
 
+func findIndex(columnNames []string, s string) int {
+	for i, val := range columnNames {
+		if val == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func sortColumns(df *DataFrame, columnNames []string) {
+	sort.Slice(df.columns, func(i, j int) bool {
+		indexI := findIndex(columnNames, df.columns[i].Name)
+		indexJ := findIndex(columnNames, df.columns[j].Name)
+		return indexI < indexJ
+	})
+}
+
 func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
-	startingTime := time.Now()
-	var df DataFrame = make(map[string]Series)
+
+	var df DataFrame = DataFrame{
+		columns: []Series{},
+		rows:    0,
+		cols:    0,
+	}
 
 	var header bool
 	var fixedNumberOfColumnsInAllRecords int
@@ -77,13 +110,15 @@ func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
 		listOfColumns = rowSplitter(scanner.Text())
 		madeHeader = 1
 		fixedNumberOfColumnsInAllRecords = len(listOfColumns)
-
+		df.cols = fixedNumberOfColumnsInAllRecords
 		for range listOfColumns {
-			rows = append(rows, []string{}) //
+			rows = append(rows, []string{})
 		}
 	}
+	numRows := 0
 
 	for scanner.Scan() {
+		numRows++
 		line := rowSplitter(scanner.Text())
 		columnsInCurrentRecord := len(line)
 		if madeHeader == 0 {
@@ -94,7 +129,7 @@ func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
 			listOfColumns = col
 			madeHeader = 1
 			fixedNumberOfColumnsInAllRecords = columnsInCurrentRecord
-
+			df.cols = fixedNumberOfColumnsInAllRecords
 			for range listOfColumns {
 				rows = append(rows, []string{}) //
 			}
@@ -108,6 +143,7 @@ func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
 			}
 		}
 	}
+	df.rows = numRows
 
 	seriesChannel := make(chan Series, len(listOfColumns))
 	wg := sync.WaitGroup{}
@@ -119,12 +155,11 @@ func Read_CSV(filename string, hasHeader ...bool) (DataFrame, error) {
 		wg.Wait()
 		close(seriesChannel)
 	}()
-	for s := range seriesChannel {
-		df[s.Name] = s
-	}
 
-	endingTime := time.Now()
-	fmt.Println("Time taken to read the file: ", endingTime.Sub(startingTime))
+	for s := range seriesChannel {
+		df.columns = append(df.columns, s)
+	}
+	sortColumns(&df, listOfColumns)
 
 	return df, nil
 }
@@ -136,39 +171,24 @@ func Write_CSV(df DataFrame, filename string) error {
 	}
 	defer file.Close()
 	var sb strings.Builder
-	columns := 0
-	rows := -1
-	listOfColumns := []string{}
-	for key, val := range df {
-		if rows == -1 {
-			rows = val.Len()
-		}
-		listOfColumns = append(listOfColumns, key)
-	}
-	sort.Strings(listOfColumns)
-	for _, key := range listOfColumns {
-		if columns > 0 {
+
+	for key, val := range df.columns {
+
+		sb.WriteString(val.Name)
+		if key < df.cols-1 {
+
 			sb.WriteString(",")
 		}
-		sb.WriteString(key)
-		columns++
-
 	}
-	for i := 0; i < rows; i++ {
-		for _, key := range listOfColumns {
-			if columns > 0 {
+	sb.WriteString("\n")
+	for i := 0; i < df.rows; i++ {
+		for j, val := range df.columns {
+			sb.WriteString(fmt.Sprintf("%v", val.elements.Get(i)))
+			if j < df.cols-1 {
 				sb.WriteString(",")
 			}
-			if df[key].elements.IsNan(i) {
-				sb.WriteString("NaN")
-			} else {
-				sb.WriteString(fmt.Sprintf("%v", df[key].elements.Get(i)))
-			}
-			columns++
 		}
 		sb.WriteString("\n")
-		columns = 0
-
 	}
 	file.WriteString(sb.String())
 	return nil
@@ -177,8 +197,8 @@ func Write_CSV(df DataFrame, filename string) error {
 func (df DataFrame) String() string {
 
 	var sb strings.Builder
-	for key, val := range df {
-		sb.WriteString(fmt.Sprintf("%s: ", key))
+	for key, val := range df.columns {
+		sb.WriteString(fmt.Sprintf("%v: ", key))
 		sb.WriteString(val.String())
 		sb.WriteString("\n")
 	}
@@ -187,10 +207,159 @@ func (df DataFrame) String() string {
 
 func (df DataFrame) Head() string {
 	var sb strings.Builder
-	for _, val := range df {
-		sb.WriteString(fmt.Sprintf("%s: ", val.Name))
-		sb.WriteString(val.elements.Head())
+
+	for i := 0; i < df.cols; i++ {
+		sb.WriteString(fmt.Sprintf("%20s", df.columns[i].Name))
+
+		sb.WriteString("|")
+
+	}
+	sb.WriteString("\n")
+	for i := 0; i < df.cols; i++ {
+		sb.WriteString(fmt.Sprintf("%s", "-----------------------"))
+
+		sb.WriteString("|")
+
+	}
+	sb.WriteString("\n")
+	for i := 0; i < 5; i++ {
+		for _, val := range df.columns {
+			sb.WriteString(fmt.Sprintf("%20v", val.elements.Get(i)))
+			sb.WriteString("|")
+		}
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+func (df DataFrame) Tail() string {
+	var sb strings.Builder
+
+	for i := 0; i < df.cols; i++ {
+		sb.WriteString(fmt.Sprintf("%20s", df.columns[i].Name))
+
+		sb.WriteString("|")
+
+	}
+	sb.WriteString("\n")
+	for i := 0; i < df.cols; i++ {
+		sb.WriteString(fmt.Sprintf("%s", "-----------------------"))
+
+		sb.WriteString("|")
+
+	}
+	sb.WriteString("\n")
+	endPoint := df.rows - 5
+	if endPoint < 0 {
+		endPoint = 0
+
+	}
+	for i := df.rows - 1; i > endPoint; i-- {
+		for _, val := range df.columns {
+			sb.WriteString(fmt.Sprintf("%20v", val.elements.Get(i)))
+			sb.WriteString("|")
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+func (df DataFrame) GetColumn(columnName string) Series {
+	for _, val := range df.columns {
+		if val.Name == columnName {
+			return val.Copy()
+		}
+	}
+	return Series{}
+}
+
+func (df DataFrame) GetColumns(columnNames ...string) DataFrame {
+	var newDF DataFrame = DataFrame{
+		columns: []Series{},
+		rows:    df.rows,
+		cols:    len(columnNames),
+	}
+	for _, val := range columnNames {
+		newDF.columns = append(newDF.columns, df.GetColumn(val))
+	}
+	return newDF
+}
+
+func (df DataFrame) GetRows(startingRow, endingRow int) DataFrame {
+	var newDF DataFrame = DataFrame{
+		columns: []Series{},
+		rows:    endingRow - startingRow,
+		cols:    df.cols,
+	}
+
+	for _, val := range df.columns {
+		newDF.columns = append(newDF.columns, val.GetRows(startingRow, endingRow))
+	}
+	return newDF
+}
+
+func (df DataFrame) GetRow(index int) DataFrame {
+	return df.GetRows(index, index)
+}
+
+func (df DataFrame) Get(row, col int) interface{} {
+	return df.columns[col].elements.Get(row)
+}
+
+func (df DataFrame) SortBy(column string) DataFrame {
+	var newDF = DataFrame{
+		columns: []Series{},
+		rows:    df.rows,
+		cols:    df.cols,
+	}
+	for _, val := range df.columns {
+		newDF.columns = append(newDF.columns, val.Copy())
+	}
+
+	sortByColumn := func(column string) Series {
+		for _, val := range newDF.columns {
+			if val.Name == column {
+				return val
+			}
+		}
+		return Series{}
+	}(column)
+
+	for i, val := range newDF.columns {
+		newDF.columns[i] = val.SortBy(sortByColumn)
+	}
+	return newDF
+}
+
+func (df DataFrame) RowNum() int {
+	return df.rows
+}
+func (df DataFrame) ColNum() int {
+	return df.cols
+}
+
+func (df DataFrame) GetColumnsAsArray(columnNames ...string) []numerics.Array {
+	arr := []numerics.Array{}
+	for _, val := range columnNames {
+		arr = append(arr, df.GetColumn(val).Array())
+	}
+	return arr
+}
+
+func (df DataFrame) TrainTestSplit(testSize float64) (DataFrame, DataFrame) {
+	if testSize > 1 || testSize < 0 {
+		panic("test size should be between 0 and 1")
+	}
+	testRows := int(float64(df.rows) * testSize)
+	trainRows := df.rows - testRows
+
+	return df.GetRows(0, trainRows), df.GetRows(trainRows, df.rows)
+}
+
+func (df DataFrame) Shape() (int, int) {
+	return df.rows, df.cols
+}
+
+func (df DataFrame) Mean(columnName string) float64 {
+	return df.GetColumn(columnName).Mean()
 }
